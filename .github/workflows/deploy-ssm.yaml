@@ -1,0 +1,49 @@
+name: Deploy via SSM
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: us-east-1
+
+      - name: Package app
+        run: tar -czf app.tar.gz app/
+
+      - name: Upload to S3
+        run: aws s3 cp app.tar.gz s3://${{ secrets.S3_DEPLOY_BUCKET }}/app.tar.gz
+
+      - name: Deploy via SSM
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.APP_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy python app" \
+            --parameters commands='[
+              "aws s3 cp s3://${{ secrets.S3_DEPLOY_BUCKET }}/app.tar.gz /home/ec2-user/app.tar.gz",
+              "cd /home/ec2-user && tar -xzf app.tar.gz",
+              "cd /home/ec2-user/app && pip3 install -r requirements.txt --break-system-packages",
+              "sudo pkill -f app.py || true",
+              "sleep 1",
+              "setsid nohup python3 /home/ec2-user/app/app.py > /home/ec2-user/app.log 2>&1 < /dev/null &"
+            ]' \
+            --query "Command.CommandId" --output text)
+
+          echo "Command ID: $COMMAND_ID"
+          sleep 15
+
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.APP_INSTANCE_ID }}" \
+            --query '{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}'
