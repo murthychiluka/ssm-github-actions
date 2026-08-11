@@ -12,5 +12,20 @@ APP_INSTANCE_ID	   The instance ID
 S3_DEPLOY_BUCKET	 murthychiluka-deploy-bucket
 6. Make sure your repo has an app/ folder
 
+```
+The easiest way to remember
+
+Private EC2 + GitHub-hosted runner:     GitHub Actions → S3 → SSM → Private EC2
+
+Private EC2 + self-hosted runner in VPC:  GitHub Actions → Runner → Private EC2
+text```
+
+The important takeaway
+| Method         | Artifact transfer | Remote command | SSH/22 needed? |
+| -------------- | ----------------- | -------------- | -------------- |
+| SCP only       | ✅                 | Via SSH        | ✅              |
+| SSM + S3       | S3                | SSM            | ❌              |
+| SSM + Git pull | GitHub            | SSM            | ❌              |
+| SCP + SSM      | SCP               | SSM            | ✅              |
 
 
